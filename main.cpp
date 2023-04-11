@@ -23,24 +23,38 @@ namespace VirtualMemory
 
 	void* Reserve(size_t reserve_byte_size)
 	{
+		// This reserves a range of the process's virtual address space, but does not allocate actual
+		// physical memory to back these addresses
 		void* reserve = VirtualAlloc(NULL, reserve_byte_size, MEM_RESERVE, PAGE_NOACCESS);
+		assert(reserve && "Failed to reserve virtual memory");
 		return reserve;
 	}
 
 	bool Commit(void* address, size_t num_bytes)
 	{
+		// This allocates memory for the specified reserved memory location
+		// The physical memory pages will not be allocated unless the virtual addresses are actually accessed
+		// The memory will always be initialized to 0
 		void* committed = VirtualAlloc(address, num_bytes, MEM_COMMIT, PAGE_READWRITE);
+		assert(committed && "Failed to commit virtual memory");
 		return committed;
 	}
 
 	void Decommit(void* address, size_t num_bytes)
 	{
-		VirtualFree(address, num_bytes, MEM_DECOMMIT);
+		// This decommits all memory pages that contain one or more bytes in the range of lpAddress - (lpAddress + dwSize)
+		// If the address is a base address returned by VirtualAlloc and dwSize is 0, it will decommit an entire rection that
+		// was previously allocated with VirtualAlloc (it will still remain reserved).
+		int status = VirtualFree(address, num_bytes, MEM_DECOMMIT);
+		assert(status > 0 && "Failed to decommit virtual memory");
 	}
 
 	void Release(void* address)
 	{
-		VirtualFree(address, 0, MEM_RELEASE);
+		// dwSize needs to be 0 if the dwFreeType is MEM_RELEASE
+		// This will free the entire region that was reserved in the initial VirtualAlloc call
+		int status = VirtualFree(address, 0, MEM_RELEASE);
+		assert(status > 0 && "Failed to release virtual memory");
 	}
 
 }
