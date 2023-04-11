@@ -3,6 +3,9 @@
 #include <malloc.h>
 #include <assert.h>
 
+#include <Windows.h>
+#include <memoryapi.h>
+
 // TODO: Remove, just for std::cin.get()
 #include <iostream>
 
@@ -12,29 +15,51 @@
 #define ALIGN_POW2(x, align) ((intptr_t)(x) + ((align) - 1) & (-(intptr_t)(align)))
 #define ALIGN_DOWN_POW2(x, align) ((intptr_t)(x) & (-(intptr_t)(align)))
 
-#define BYTES(x) x
-#define KILOBYTES(x) x << 10
-#define MEGABYTES(x) x << 20
-#define GIGABYTES(x) x << 30
+// -------------------------------------------------------------------------
+// Virtual memory helpers
+
+namespace VirtualMemory
+{
+
+	void* Reserve(size_t reserve_byte_size)
+	{
+		void* reserve = VirtualAlloc(NULL, reserve_byte_size, MEM_RESERVE, PAGE_NOACCESS);
+		return reserve;
+	}
+
+	bool Commit(void* address, size_t num_bytes)
+	{
+		void* committed = VirtualAlloc(address, num_bytes, MEM_COMMIT, PAGE_READWRITE);
+		return committed;
+	}
+
+	void Decommit(void* address, size_t num_bytes)
+	{
+		VirtualFree(address, num_bytes, MEM_DECOMMIT);
+	}
+
+	void Release(void* address)
+	{
+		VirtualFree(address, 0, MEM_RELEASE);
+	}
+
+}
 
 // -------------------------------------------------------------------------
 // Linear allocator
+
+// 4 GB
+#define LINEAR_ALLOCATOR_DEFAULT_RESERVE_SIZE (4ull << 30)
+// 4 KB
+#define LINEAR_ALLOCATOR_COMMIT_CHUNK_SIZE (4ull << 10)
 
 namespace LinearAllocator
 {
 
 	uint8_t* buffer_ptr_base;
-	uint8_t* buffer_ptr_end;
 	uint8_t* buffer_ptr_at;
-
-	void Initialize(size_t initial_byte_size)
-	{
-		// TODO: Replace with virtual malloc so that we can reserve a large chunk
-		// of memory without actually committing it until we need it
-		buffer_ptr_base = (uint8_t*)malloc(initial_byte_size);
-		buffer_ptr_end = buffer_ptr_base + initial_byte_size;
-		buffer_ptr_at = buffer_ptr_base;
-	}
+	uint8_t* buffer_ptr_end;
+	uint8_t* buffer_ptr_committed;
 
 	size_t GetAlignedByteSizeLeft(size_t align)
 	{
@@ -43,22 +68,48 @@ namespace LinearAllocator
 		return aligned_byte_size_left;
 	}
 
+	void SetAtPointer(uint8_t* new_at_ptr)
+	{
+		if (new_at_ptr >= buffer_ptr_base && new_at_ptr < buffer_ptr_end)
+		{
+			if (new_at_ptr > buffer_ptr_committed)
+			{
+				size_t commit_chunk_size = ALIGN_POW2(new_at_ptr - buffer_ptr_committed, LINEAR_ALLOCATOR_COMMIT_CHUNK_SIZE);
+				VirtualMemory::Commit(buffer_ptr_committed, commit_chunk_size);
+
+				buffer_ptr_committed += commit_chunk_size;
+
+				printf("Committed %llu bytes of memory\n", commit_chunk_size);
+			}
+
+			buffer_ptr_at = new_at_ptr;
+		}
+	}
+
 	void* Allocate(size_t num_bytes, size_t align)
 	{
-		void* alloc = nullptr;
+		printf("Trying to allocate %llu bytes\n", num_bytes);
+
+		if (!buffer_ptr_base)
+		{
+			buffer_ptr_base = (uint8_t*)VirtualMemory::Reserve(LINEAR_ALLOCATOR_DEFAULT_RESERVE_SIZE);
+			buffer_ptr_at = buffer_ptr_base;
+			buffer_ptr_end = buffer_ptr_base + LINEAR_ALLOCATOR_DEFAULT_RESERVE_SIZE;
+			buffer_ptr_committed = buffer_ptr_base;
+
+			printf("Reserved %llu bytes of memory\n", LINEAR_ALLOCATOR_DEFAULT_RESERVE_SIZE);
+		}
+
+		uint8_t* alloc = nullptr;
 
 		if (GetAlignedByteSizeLeft(align) >= num_bytes)
 		{
-			alloc = buffer_ptr_at;
+			alloc = (uint8_t*)ALIGN_POW2(buffer_ptr_at, align);
+			SetAtPointer(alloc + num_bytes);
 			memset(alloc, 0, num_bytes);
-			buffer_ptr_at += num_bytes;
 		}
-		else
-		{
-			// TODO: Handle this more gracefully, reserve and commit some more memory
-			// but for now this is fine to test with
-			//assert(false && "We have run out of memory!");
-		}
+
+		printf("Allocated %llu bytes\n", num_bytes);
 
 		return alloc;
 	}
@@ -99,18 +150,31 @@ int main()
 	
 	// LINEAR ALLOCATOR
 
-	LinearAllocator::Initialize(BYTES(24));
-
+	printf("Integer - 4 bytes\n");
 	int* allocated_int = LINEAR_ALLOC_STRUCT_(int);
-	printf("%i\n", *allocated_int);
 
+	printf("Float - 4 bytes\n");
 	float* allocated_float = LINEAR_ALLOC_STRUCT_(float);
-	printf("%f\n", *allocated_float);
 
+	printf("NonTrivialStruct - 16 bytes\n");
 	NonTrivialStruct* allocated_non_trivial_struct = LINEAR_ALLOC_STRUCT_(NonTrivialStruct);
 	allocated_non_trivial_struct->integer = 1234;
 	allocated_non_trivial_struct->string = "TestString";
-	printf("%i, %s\n", allocated_non_trivial_struct->integer, allocated_non_trivial_struct->string);
+
+	printf("NonTrivialStruct (1000) - 16000 bytes\n");
+	NonTrivialStruct* allocated_nts_array = LINEAR_ALLOC_ARRAY_(NonTrivialStruct, 1000);
+	for (size_t i = 0; i < 1000; ++i)
+	{
+		allocated_nts_array[i].integer = i;
+		allocated_nts_array[i].string = "TestStringArray";
+	}
+
+	printf("uint64_t (10000) - 80000 bytes\n");
+	uint64_t* allocated_uint64_array = LINEAR_ALLOC_ARRAY_(uint64_t, 10000);
+	for (size_t i = 0; i < 10000; ++i)
+	{
+		allocated_uint64_array[i] = i;
+	}
 
 	std::cin.get();
 }
