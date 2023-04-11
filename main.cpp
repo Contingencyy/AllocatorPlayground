@@ -6,11 +6,19 @@
 // TODO: Remove, just for std::cin.get()
 #include <iostream>
 
+// -------------------------------------------------------------------------
+// Some useful defines
+
 #define ALIGN_POW2(x, align) ((intptr_t)(x) + ((align) - 1) & (-(intptr_t)(align)))
 #define ALIGN_DOWN_POW2(x, align) ((intptr_t)(x) & (-(intptr_t)(align)))
+
+#define BYTES(x) x
 #define KILOBYTES(x) x << 10
 #define MEGABYTES(x) x << 20
 #define GIGABYTES(x) x << 30
+
+// -------------------------------------------------------------------------
+// Linear allocator
 
 namespace LinearAllocator
 {
@@ -47,9 +55,9 @@ namespace LinearAllocator
 		}
 		else
 		{
-			// Handle this more gracefully, reserve and commit some more memory
+			// TODO: Handle this more gracefully, reserve and commit some more memory
 			// but for now this is fine to test with
-			assert(false && "We have run out of memory!");
+			//assert(false && "We have run out of memory!");
 		}
 
 		return alloc;
@@ -57,12 +65,20 @@ namespace LinearAllocator
 
 }
 
-// Todo: Implement scope allocator that deallocates if going out of scope
+#define LINEAR_ALLOC_(num_bytes, align) LinearAllocator::Allocate(num_bytes, align)
+#define LINEAR_ALLOC_STRUCT_(type) (type*)LINEAR_ALLOC_(sizeof(type), alignof(type))
+#define LINEAR_ALLOC_ARRAY_(type, count) (type*)LINEAR_ALLOC_(count * sizeof(type), alignof(type))
+
+// -------------------------------------------------------------------------
+// TODO: Implement scope allocator that deallocates if going out of scope
+
 namespace ScopeAllocator
 {
 }
 
-// Todo: Implement arena allocator which allows linear allocation but in arenas
+// -------------------------------------------------------------------------
+// TODO: Implement arena allocator which allows linear allocation but in arenas
+
 namespace ArenaAllocator
 {
 }
@@ -73,20 +89,25 @@ struct NonTrivialStruct
 	const char* string;
 };
 
+// -------------------------------------------------------------------------
+// Main
+
 int main()
 {
-	// Allocator playground to test different implementation of memory allocators
-	LinearAllocator::Initialize(KILOBYTES(1));
+	// -------------------------------------------------------------------------
+	// Allocator playground to test different implementations of memory allocators
 	
-	int* allocated_int = (int*)LinearAllocator::Allocate(sizeof(int), alignof(int));
+	// LINEAR ALLOCATOR
+
+	LinearAllocator::Initialize(BYTES(24));
+
+	int* allocated_int = LINEAR_ALLOC_STRUCT_(int);
 	printf("%i\n", *allocated_int);
 
-	float* allocated_float = (float*)LinearAllocator::Allocate(sizeof(float), alignof(float));
+	float* allocated_float = LINEAR_ALLOC_STRUCT_(float);
 	printf("%f\n", *allocated_float);
 
-	NonTrivialStruct* allocated_non_trivial_struct = (NonTrivialStruct*)LinearAllocator::Allocate(
-		sizeof(NonTrivialStruct), alignof(NonTrivialStruct)
-	);
+	NonTrivialStruct* allocated_non_trivial_struct = LINEAR_ALLOC_STRUCT_(NonTrivialStruct);
 	allocated_non_trivial_struct->integer = 1234;
 	allocated_non_trivial_struct->string = "TestString";
 	printf("%i, %s\n", allocated_non_trivial_struct->integer, allocated_non_trivial_struct->string);
