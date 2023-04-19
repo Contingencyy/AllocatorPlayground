@@ -130,9 +130,9 @@ namespace LinearAllocator
 
 }
 
-#define LINEAR_ALLOC_(num_bytes, align) LinearAllocator::Allocate(num_bytes, align)
-#define LINEAR_ALLOC_STRUCT_(type) (type*)LINEAR_ALLOC_(sizeof(type), alignof(type))
-#define LINEAR_ALLOC_ARRAY_(type, count) (type*)LINEAR_ALLOC_(count * sizeof(type), alignof(type))
+#define LINEAR_ALLOC_VOID_(num_bytes, align) LinearAllocator::Allocate(num_bytes, align)
+#define LINEAR_ALLOC_(type) (type*)LINEAR_ALLOC_VOID_(sizeof(type), alignof(type))
+#define LINEAR_ALLOC_ARRAY_(type, count) (type*)LINEAR_ALLOC_VOID_(count * sizeof(type), alignof(type))
 
 // -------------------------------------------------------------------------
 // TODO: Implement scope allocator that deallocates if going out of scope
@@ -165,13 +165,13 @@ int main()
 	// LINEAR ALLOCATOR
 
 	printf("Integer - 4 bytes\n");
-	int* allocated_int = LINEAR_ALLOC_STRUCT_(int);
+	int* allocated_int = LINEAR_ALLOC_(int);
 
 	printf("Float - 4 bytes\n");
-	float* allocated_float = LINEAR_ALLOC_STRUCT_(float);
+	float* allocated_float = LINEAR_ALLOC_(float);
 
 	printf("NonTrivialStruct - 16 bytes\n");
-	NonTrivialStruct* allocated_non_trivial_struct = LINEAR_ALLOC_STRUCT_(NonTrivialStruct);
+	NonTrivialStruct* allocated_non_trivial_struct = LINEAR_ALLOC_(NonTrivialStruct);
 	allocated_non_trivial_struct->integer = 1234;
 	allocated_non_trivial_struct->string = "TestString";
 
